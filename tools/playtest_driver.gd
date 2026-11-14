@@ -155,6 +155,7 @@ func _run() -> void:
 	_check(Dialogue.is_active and get_tree().current_scene.name == "AcademyHub", "hatch is locked before certification")
 	await _talk_through()
 
+	_burst("walk", 24, 0.05)
 	await _walk([Vector2(346, 90), Vector2(360, 152)])
 	await _shot("03_academy_room")
 	await _press(&"interact")

@@ -8,13 +8,17 @@ const SPEED := 112.0
 const ACCELERATION := 1600.0
 const DECELERATION := 1850.0
 const REACH := 28.0
+const WALK_FRAMES := 8          # frames stacked top to bottom in the walk sheet
+const WALK_FRAME_TIME := 0.1    # seconds per frame (10 fps)
 
 var _sprite: Sprite2D
 var _prompt: Label
 var _target: Node2D
 var _walk_time: float = 0.0
 var _dust: CPUParticles2D
-var _last_step_sign: float = 1.0
+var _last_frame: int = -1
+var _idle_texture: Texture2D
+var _walk_texture: Texture2D
 
 
 func _ready() -> void:
@@ -40,7 +44,9 @@ func _ready() -> void:
 	add_child(_dust)
 
 	_sprite = Sprite2D.new()
-	_sprite.texture = load("res://assets/art/characters/player_astronaut.png")
+	_idle_texture = load("res://assets/art/characters/player_astronaut.png")
+	_walk_texture = load("res://assets/art/characters/player_walk_sheet.png")
+	_sprite.texture = _idle_texture
 	_sprite.position = Vector2(0, -15)
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://assets/shaders/suit_tint.gdshader")
@@ -73,6 +79,9 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector2.ZERO
 		_dust.emitting = false
 		_prompt.visible = false
+		_walk_time = 0.0
+		_last_frame = -1
+		_show_idle()
 		_sprite.position = Vector2(0, -15)
 		_sprite.rotation = 0.0
 		return
@@ -83,23 +92,42 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 	if get_real_velocity().length_squared() > 25.0:
-		_walk_time += get_position_delta().length() / SPEED
-		var step := sin(_walk_time * 14.0)
+		# Kareem's 8-frame walk cycle: one frame every 100 ms, only while moving.
+		_walk_time += delta
+		var frame := int(_walk_time / WALK_FRAME_TIME) % WALK_FRAMES
+		_show_walk_frame(frame)
 		_dust.emitting = true
-		if signf(step) != _last_step_sign:
-			_last_step_sign = signf(step)
-			Sfx.play(&"step", randf_range(0.9, 1.15))
-		_sprite.position = Vector2(roundf(step), -15 - roundf(absf(step)))
-		_sprite.rotation = step * 0.045
+		if frame != _last_frame and frame % 4 == 0:
+			Sfx.play(&"step", randf_range(0.9, 1.15))  # frames 0 and 4 are the foot contacts
+		_last_frame = frame
+		# A 1-pixel lift on the highest frames keeps a little bounce on top of the cycle.
+		_sprite.position = Vector2(0, -15 - (1 if frame % 4 == 2 else 0))
+		_sprite.rotation = 0.0
 		if dir.x != 0.0:
 			_sprite.flip_h = dir.x < 0.0
 	else:
 		_dust.emitting = false
 		_walk_time = 0.0
+		_last_frame = -1
+		_show_idle()
 		_sprite.position = Vector2(0, -15)
 		_sprite.rotation = 0.0
 
 	_update_target()
+
+
+func _show_walk_frame(frame: int) -> void:
+	if _sprite.texture != _walk_texture:
+		_sprite.texture = _walk_texture
+		_sprite.vframes = WALK_FRAMES
+	_sprite.frame = frame
+
+
+func _show_idle() -> void:
+	if _sprite.texture != _idle_texture:
+		_sprite.frame = 0
+		_sprite.vframes = 1
+		_sprite.texture = _idle_texture
 
 
 func _unhandled_input(event: InputEvent) -> void:
