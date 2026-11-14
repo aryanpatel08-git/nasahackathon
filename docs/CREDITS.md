@@ -17,6 +17,8 @@
   (Pixel Engine model). Asset IDs are in `spritecook-assets.json`.
 - Astronaut walk cycle (`assets/art/characters/player_walk_sheet.png`, 8 frames of 32 x 32): made by Kareem Dahrouj by
   rearranging pixels of the SpriteCook astronaut sprite. Played at 10 frames per second.
+- Directional astronaut animations (`assets/art/characters/astronaut/`: idle, 8-frame walk in 4 directions, 3/4 turn frames): made by Kareem Dahrouj by
+  redrawing the SpriteCook astronaut in side profile and back view. Played by `scripts/player/player.gd`.
 - Rooms, props and UI are drawn in code by the game.
 - `docs/handoff/.../references/*.png`: AI-generated concept images supplied by Jimmy as visual targets.
   They are not used as game assets and are excluded from the Godot project by `docs/.gdignore`.
