@@ -10,19 +10,48 @@ config_version=5
 
 [application]
 
-config/name="NASAHACKATHON"
-config/features=PackedStringArray("4.7", "Forward Plus")
+config/name="Lunar Life"
+run/main_scene="res://scenes/ui/create_astronaut.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+EventBus="*res://scripts/autoload/event_bus.gd"
+GameState="*res://scripts/autoload/game_state.gd"
+ResourceSim="*res://scripts/autoload/resource_sim.gd"
+Controls="*res://scripts/autoload/controls.gd"
+SceneRouter="*res://scripts/autoload/scene_router.gd"
+Dialogue="*res://scripts/autoload/dialogue.gd"
+MissionDirector="*res://scripts/autoload/mission_director.gd"
+TaskLog="*res://scripts/autoload/task_log.gd"
+PauseMenu="*res://scripts/autoload/pause_menu.gd"
+Sfx="*res://scripts/autoload/sfx.gd"
 
 [display]
 
-window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
+window/size/viewport_width=480
+window/size/viewport_height=270
+window/size/window_width_override=1440
+window/size/window_height_override=810
+window/stretch/mode="viewport"
+window/stretch/scale_mode="integer"
+
+[gui]
+
+theme/default_font_antialiasing=0
 
 [physics]
 
+common/physics_interpolation=true
 3d/physics_engine="Jolt Physics"
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
 rendering_device/driver.windows="d3d12"
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
+

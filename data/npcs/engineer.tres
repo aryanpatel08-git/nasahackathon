@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="NPCData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/npc_data.gd" id="1_npc"]
+[ext_resource type="Texture2D" path="res://assets/art/characters/npc_engineer.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_npc")
+id = &"engineer"
+display_name = "Engineer Rivera"
+role = "Power Systems"
+sprite = ExtResource("2_tex")
+lines = PackedStringArray("Hi {name}! The Sun is about to hide behind a ridge.", "Keep Life Support powered until it comes back. Postpone something that can wait.", "Here is the console. Set your switches, then press Go.")
+opens_scene = &""

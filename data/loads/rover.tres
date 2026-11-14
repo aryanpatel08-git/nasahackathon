@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="LoadDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/load_def.gd" id="1_load"]
+
+[resource]
+script = ExtResource("1_load")
+id = &"rover"
+display_name = "Rover Charging"
+power_draw = 3.0
+priority = 6
+can_disable = true
+starts_enabled = true
+why_it_matters = "Charges the rover so the crew can explore and collect samples."

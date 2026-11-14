@@ -1,0 +1,32 @@
+{
+  "project": {
+    "name": "Lunar Life",
+    "id": "d980d424-d949-485e-91dd-b7d285aa2b8e"
+  },
+  "assets": [
+    {
+      "asset_id": "1aaacbc6-f9df-4c42-b622-15d2e1d23590",
+      "file": "assets/art/characters/player_astronaut.png",
+      "sha12": "86356de3e709",
+      "label": "player astronaut (grey ramp, recolourable)"
+    },
+    {
+      "asset_id": "ebc28343-17df-4154-984e-c2e9297a3743",
+      "file": "assets/art/characters/npc_commander.png",
+      "sha12": "3da05350be5c",
+      "label": "NPC commander"
+    },
+    {
+      "asset_id": "c2a6c466-e458-405a-8e5c-7fb7d715d4fd",
+      "file": "assets/art/characters/npc_engineer.png",
+      "sha12": "e51b783a29ea",
+      "label": "NPC power engineer"
+    },
+    {
+      "asset_id": "92586d7e-5fa0-4787-9838-03b78a6e6f43",
+      "file": "assets/art/characters/npc_botanist.png",
+      "sha12": "b53e6a0171ac",
+      "label": "NPC botanist"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "_about": "GAME settings for replaying the archived solar particle event. These are gameplay choices in simplified game units, NOT NASA measurements.",
+  "mission_start_hour": 4,
+  "mission_start_battery": 20.0,
+  "shift_hours_before_alert": 6,
+  "storm_hours": 8,
+  "seconds_per_storm_hour": 4.0,
+  "shelter_readiness": 90.0
+}

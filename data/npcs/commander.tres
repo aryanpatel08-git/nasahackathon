@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="NPCData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/npc_data.gd" id="1_npc"]
+[ext_resource type="Texture2D" path="res://assets/art/characters/npc_commander.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_npc")
+id = &"commander"
+display_name = "Commander Okafor"
+role = "Academy Head"
+sprite = ExtResource("2_tex")
+lines = PackedStringArray("Welcome, {name}. Here is your mission.", "Keep the crew breathing. Check the power reserve and the crops.", "When the radiation alert sounds, reach the shielded shelter.", "Move with WASD or the arrow keys. Press E to talk and to use stations. Talk to me to hear this again.", "First, train with Engineer Rivera at the power console. Then leave through the exit hatch.")
+opens_scene = &""

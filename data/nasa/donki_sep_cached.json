@@ -1,0 +1,14 @@
+{
+  "_about": "Archived copy of one real record from NASA CCMC DONKI (Space Weather Database Of Notifications, Knowledge, Information). Fields under 'record' are copied unchanged from the API response.",
+  "_source_api": "https://ccmc.gsfc.nasa.gov/DONKI-API/get/SEP?startDate=2024-05-01&endDate=2024-06-15",
+  "_retrieved_utc": "2026-11-14",
+  "_provenance": "ARCHIVED",
+  "record": {
+    "sepID": "2024-05-10T13:35:00-SEP-001",
+    "eventTime": "2024-05-10T13:35Z",
+    "instruments": [{"displayName": "GOES-P: SEISS >10 MeV"}],
+    "link": "https://ccmc.gsfc.nasa.gov/DONKI/view/SEP/30677/-1",
+    "submissionTime": "2024-05-10T13:46Z",
+    "versionId": 1
+  }
+}

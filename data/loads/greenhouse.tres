@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="LoadDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/load_def.gd" id="1_load"]
+
+[resource]
+script = ExtResource("1_load")
+id = &"greenhouse"
+display_name = "Greenhouse Lights"
+power_draw = 3.0
+priority = 4
+can_disable = true
+starts_enabled = true
+why_it_matters = "Grow lights for the crops. Without them, plants start to wilt."
