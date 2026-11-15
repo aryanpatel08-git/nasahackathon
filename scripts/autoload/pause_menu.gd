@@ -133,7 +133,6 @@ func _show_page(page: String) -> void:
 		_panel.modulate.a = 1.0
 	_content.custom_minimum_size = Vector2(430 if wide else 250, 0)
 	_panel.position = Vector2(16 if wide else 107, 6 if wide else REST_Y)
-	_panel.reset_size()
 	var first: Control
 	var back_action: Callable = _resume if _direct else _show_page.bind("home")
 	var back_text := "Close" if _direct else "Back"
@@ -199,6 +198,9 @@ func _show_page(page: String) -> void:
 			_button("Quit to desktop", func() -> void: get_tree().quit())
 	if first != null:
 		first.grab_focus()
+	# Fit the panel to the page that was just built (not the one that was removed).
+	_panel.reset_size()
+	_panel.reset_size.call_deferred()
 
 
 ## Field notes: titles on the left, the chosen note on the right.
