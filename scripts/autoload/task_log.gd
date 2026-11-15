@@ -46,7 +46,7 @@ func entries() -> Array[Dictionary]:
 	if not GameState.get_flag(&"astronaut_created"):
 		return list
 
-	_add(list, "Explore the academy", "Find the briefing board, training bench and plant lab.", GameState.get_flag(&"academy_explored"))
+	_add(list, "Explore the academy", "Visit the space-weather desk, the power lab and the plant lab.", GameState.get_flag(&"academy_explored"))
 	var mentors_met := 0
 	for mentor in MENTORS:
 		if GameState.get_flag(StringName("mentor_" + String(mentor))):
@@ -57,12 +57,12 @@ func entries() -> Array[Dictionary]:
 		_add(list, "Complete power console training", "Postpone a load and keep the battery above empty.", d.can_graduate())
 		_add(list, "Earn your certification", "Pass the training scenario to earn the certificate.", d.can_graduate())
 	if d.can_graduate():
-		_add(list, "Graduate and travel to the outpost", "Take the marked hatch on the academy's northeast wall.", GameState.get_flag(&"outpost_visited"))
+		_add(list, "Graduate and travel to the outpost", "Take the launch hatch on the academy's north-east wall.", GameState.get_flag(&"outpost_visited"))
 	if GameState.get_flag(&"outpost_visited"):
-		_add(list, "Check outpost power", "Use the station in the west power room.", d.power_checked)
-		_add(list, "Check the greenhouse", "Inspect the grow lights in the east greenhouse.", d.greenhouse_checked)
+		_add(list, "Check outpost power", "Use the console in the west power room.", d.power_checked)
+		_add(list, "Check the greenhouse", "Use the lamp control under the water tank in the east greenhouse.", d.greenhouse_checked)
 	if d.stage >= d.Stage.ALERT:
-		var alert_help := "Follow the amber arrows north and use the shelter station."
+		var alert_help := "Run north. Hold E to crank the shelter hatch open, then step inside."
 		if d.stage == d.Stage.DEBRIEF and not d.reached_shelter:
 			alert_help = "The crew missed shelter. Retry from the debrief to try again."
 		_add(list, "Respond to the space weather alert", alert_help, d.reached_shelter)

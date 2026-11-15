@@ -1,76 +1,46 @@
 extends Node2D
 ## Lunar outpost — one connected, walkable map.
-##   Power room (west) - central corridor - Greenhouse (east), Shelter (north).
+##   Power room (west) - central corridor - Greenhouse (east), Storm shelter (north).
 ##
 ## Layers are kept separate on purpose:
-##   - visuals:    _draw() below (flat shapes in the game palette; no baked text or characters)
-##   - collision:  built from the FLOORS / PROPS rectangles in _build_collision()
-##   - interaction: three Station nodes (walk up + press E)
-##   - UI:         a CanvasLayer HUD and ChoicePanel pop-ups
-## All rooms share geometry between rendering and collision.
+##   - floor plan:  scripts/outpost/outpost_layout.gd (every rectangle and spot)
+##   - picture:     assets/art/world/outpost_bg.png, painted from that plan by tools/art/paint_world.py
+##   - live parts:  _draw() below paints what changes while you play (battery cells, lamps,
+##                  screens, warning lights, the particle storm) on top of the picture
+##   - collision:   built from the same plan in _build_collision()
+##   - interaction: Station nodes (walk up + press E) and the shelter's BlastDoor (hold E)
+##   - UI:          scripts/ui/outpost_hud.gd, ChoicePanel pop-ups and the mission report
+##
+## The storm shelter has no "use" spot. You crank the hatch open, step inside, and the
+## hatch seals behind the crew by itself.
 
 const CELL := 4
-const SCALE := 1.5
-const MAP := Vector2i(480, 272)
-
-const CORRIDOR := Rect2(204, 100, 72, 150)
-const POWER_ROOM := Rect2(28, 124, 148, 112)
-const POWER_DOOR := Rect2(176, 162, 28, 36)
-const GREEN_ROOM := Rect2(304, 124, 148, 112)
-const GREEN_DOOR := Rect2(276, 162, 28, 36)
-const SHELTER_ROOM := Rect2(160, 30, 160, 52)
-const SHELTER_DOOR := Rect2(222, 82, 36, 18)
-const FLOORS: Array[Rect2] = [CORRIDOR, POWER_ROOM, POWER_DOOR, GREEN_ROOM, GREEN_DOOR, SHELTER_ROOM, SHELTER_DOOR]
-const ROOMS: Array[Rect2] = [CORRIDOR, POWER_ROOM, GREEN_ROOM, SHELTER_ROOM]
-
-const BATTERY_BANK := Rect2(40, 124, 64, 20)
-const POWER_CONSOLE := Rect2(116, 124, 44, 18)
-const CRATES := Rect2(32, 212, 24, 20)
-const BEDS: Array[Rect2] = [Rect2(316, 132, 44, 28), Rect2(396, 132, 44, 28), Rect2(316, 196, 44, 28), Rect2(396, 196, 44, 28)]
-const WATER_TANK := Rect2(368, 124, 20, 16)
-const BENCHES: Array[Rect2] = [Rect2(168, 30, 40, 12), Rect2(272, 30, 40, 12)]
-
-const POWER_SPOT := Vector2(138, 152)
-const GREEN_SPOT := Vector2(378, 150)
-const SHELTER_SPOT := Vector2(240, 42)
-const SPAWN := Vector2(240, 216)
-const RETURN_SPOT := Vector2(240, 242)
-
 const PLAYER_SCENE := "res://scenes/characters/player.tscn"
+const ART_DIR := "res://assets/art/world/"
 
-# Crew mates: where they work, and the route each walks to the shelter (map units).
-const TANAKA_HOME := Vector2(420, 178)
-const TANAKA_ROUTE: Array[Vector2] = [Vector2(290, 180), Vector2(240, 180), Vector2(240, 92), Vector2(240, 62), Vector2(292, 54)]
-const RIVERA_HOME := Vector2(72, 184)
-const RIVERA_ROUTE: Array[Vector2] = [Vector2(190, 180), Vector2(240, 180), Vector2(240, 92), Vector2(240, 62), Vector2(188, 54)]
+const C_TEAL := Color("5fe3d3")
+const C_TEAL_LO := Color("2a8f95")
+const C_AMBER := Color("ffc45e")
+const C_AMBER_LO := Color("b9722f")
+const C_GREEN := Color("7ddc6f")
+const C_DARK := Color("12142a")
+const C_GROW := Color("f6b7ff")
 
-const C_REGOLITH := Color(0.33, 0.31, 0.4)
-const C_CRATER := Color(0.27, 0.25, 0.34)
-const C_HULL := Color(0.15, 0.14, 0.28)
-const C_WALL := Color(0.27, 0.27, 0.43)
-const C_FLOOR := Color(0.4, 0.42, 0.52)
-const C_FLOOR_LINE := Color(0.36, 0.38, 0.48)
-const C_STEEL := Color(0.55, 0.57, 0.68)
-const C_DARK := Color(0.09, 0.09, 0.17)
-const C_TEAL := Color(0.3, 0.88, 0.82)
-const C_AMBER := Color(0.98, 0.68, 0.22)
-const C_GREEN := Color(0.4, 0.82, 0.42)
-
-var _status: Label
-var _alert_backdrop: ColorRect
-var _readout: Label
-var _power_label: Label
-var _green_label: Label
-var _shelter_label: Label
-var _shelter_note: Label
-var _alert_started: bool = false
-var _blink_on: bool = true
-var _blink_time: float = 0.0
-var _tint: CanvasModulate
-var _vignette: ColorRect
+var _bg: Texture2D
+var _art: Dictionary = {}
+var _player: Node2D
+var _hatch: BlastDoor
 var _tanaka: CrewMember
 var _rivera: CrewMember
-var _fx_time: float = 0.0
+var _tint: CanvasModulate
+var _hud: CanvasLayer
+var _shelter_px: Rect2
+var _hull_rects: Array[Rect2] = []
+var _alert_started: bool = false
+var _sheltering: bool = false
+var _crew_phase: String = "work"   # work -> to_hatch -> waiting -> to_seat -> seated
+var _call_timer: float = 0.0
+var _time: float = 0.0
 
 
 func _ready() -> void:
@@ -83,47 +53,63 @@ func _ready() -> void:
 	if first_arrival:
 		GameState.set_flag(&"outpost_arrival_seen")
 		_show_arrival_moment()
-	_build_collision()
-	_power_label = _world_label("", Vector2(POWER_ROOM.position.x + 4, POWER_ROOM.position.y - 14), C_TEAL)
-	_green_label = _world_label("", Vector2(GREEN_ROOM.position.x + 4, GREEN_ROOM.position.y - 14), C_GREEN)
-	_shelter_label = _world_label("", Vector2(SHELTER_ROOM.position.x + 4, SHELTER_ROOM.position.y - 14), C_AMBER)
-	_shelter_note = _world_label("", Vector2(258, SHELTER_ROOM.position.y - 14), C_AMBER)
 
-	_add_station(POWER_SPOT, "Check power", _on_power_used, &"power")
-	_add_station(GREEN_SPOT, "Check crops", _on_green_used, &"crops")
-	_add_station(SHELTER_SPOT, "Shelter here", _on_shelter_used, &"shelter")
-	_add_station(RETURN_SPOT, "Return to academy", _on_return_used, &"return", "Enter")
-	_world_label("ACADEMY TRANSIT", Vector2(211, 255), C_TEAL)
+	_bg = load(ART_DIR + "outpost_bg.png")
+	_art = _read_art(ART_DIR + "outpost_art.json")
+	_shelter_px = OutpostLayout.px_rect(OutpostLayout.SHELTER_ROOM)
+	for f in OutpostLayout.floors():
+		_hull_rects.append(OutpostLayout.px_rect(f).grow_individual(16, 34, 16, 20))
+	_build_collision()
+
+	_add_station(OutpostLayout.POWER_SPOT, "Check power", _on_power_used, &"power")
+	_add_station(OutpostLayout.GREEN_SPOT, "Check crops", _on_green_used, &"crops")
+	_add_station(OutpostLayout.RETURN_SPOT, "Return to academy", _on_return_used, &"return")
 
 	var actors := Node2D.new()
 	actors.name = "Actors"
 	actors.y_sort_enabled = true
 	add_child(actors)
-	var player := (load(PLAYER_SCENE) as PackedScene).instantiate() as Node2D
-	player.position = SPAWN * SCALE
-	actors.add_child(player)
-	HabitatCamera.mount(player, Vector2i(Vector2(MAP) * SCALE))
+	_player = (load(PLAYER_SCENE) as PackedScene).instantiate() as Node2D
+	_player.position = OutpostLayout.px(OutpostLayout.SPAWN)
+	actors.add_child(_player)
+	HabitatCamera.mount(_player, Vector2i(Vector2(OutpostLayout.MAP) * OutpostLayout.SCALE))
+
+	_hatch = BlastDoor.new()
+	_hatch.name = "ShelterHatch"
+	_hatch.passage = OutpostLayout.px_rect(OutpostLayout.SHELTER_DOOR)
+	_hatch.room = _shelter_px
+	_hatch.opened.connect(_on_hatch_opened)
+	actors.add_child(_hatch)
 
 	# The whole outpost dims as the Sun drops behind the ridge.
 	_tint = CanvasModulate.new()
 	add_child(_tint)
 
 	# Crew mates. After the storm they are already in the shelter.
-	var sheltered := MissionDirector.stage >= MissionDirector.Stage.SHELTERED
+	var after_storm := MissionDirector.stage >= MissionDirector.Stage.SHELTERED
 	_tanaka = _add_crew(actors, "Dr. Tanaka", "res://assets/art/characters/npc_botanist.png",
-		TANAKA_ROUTE[-1] if sheltered else TANAKA_HOME, _on_tanaka_used)
+		OutpostLayout.TANAKA_SEAT if after_storm else OutpostLayout.TANAKA_HOME, _on_tanaka_used)
 	_rivera = _add_crew(actors, "Engineer Rivera", "res://assets/art/characters/npc_engineer.png",
-		RIVERA_ROUTE[-1] if sheltered else RIVERA_HOME, _on_rivera_used)
+		OutpostLayout.RIVERA_SEAT if after_storm else OutpostLayout.RIVERA_HOME, _on_rivera_used)
+	if after_storm:
+		_crew_phase = "seated"
 
-	_add_navigation(player)
-	_build_hud()
+	_add_navigation(_player)
+	_hud = CanvasLayer.new()
+	_hud.set_script(load("res://scripts/ui/outpost_hud.gd"))
+	add_child(_hud)
+
 	MissionDirector.stage_changed.connect(_on_stage_changed)
-	MissionDirector.objectives_changed.connect(_refresh)
-	MissionDirector.storm_hour_passed.connect(func(_done: int, _total: int) -> void: _refresh())
-	EventBus.resources_changed.connect(func(_snapshot: Dictionary) -> void: _refresh())
-	_refresh()
 	if MissionDirector.stage == MissionDirector.Stage.DEBRIEF:
 		_show_debrief.call_deferred()
+
+
+func _read_art(path: String) -> Dictionary:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if parsed is Dictionary:
+		return parsed
+	push_error("Outpost: could not read %s" % path)
+	return {}
 
 
 func _show_arrival_moment() -> void:
@@ -141,16 +127,16 @@ func _show_arrival_moment() -> void:
 func _add_navigation(player: Node2D) -> void:
 	var nav := NavigationFloor.new()
 	nav.facility = "Outpost"
-	nav.bounds = Vector2(MAP) * SCALE
+	nav.bounds = Vector2(OutpostLayout.MAP) * OutpostLayout.SCALE
 	nav.player = player
-	for walkable: Rect2 in FLOORS:
-		nav.floors.append(Rect2(walkable.position * SCALE, walkable.size * SCALE))
+	for walkable in OutpostLayout.floors():
+		nav.floors.append(OutpostLayout.px_rect(walkable))
 	nav.links = {"Academy": "return"}
-	nav.add_point("entrance", "Outpost entrance", "Entry", "Arrival corridor from the academy.", "hatch", SPAWN * SCALE)
-	nav.add_point("return", "Academy transit hatch", "Transit", "Return to the academy before the alert.", "hatch", RETURN_SPOT * SCALE)
-	nav.add_point("power", "West power station", "Power", "Check battery reserves and rover charging.", "station", POWER_SPOT * SCALE)
-	nav.add_point("crops", "East greenhouse", "Crops", "Select a grow light power policy.", "station", GREEN_SPOT * SCALE)
-	nav.add_point("shelter", "Shielded shelter", "Shelter", "Reach this station during a radiation alert.", "station", SHELTER_SPOT * SCALE)
+	nav.add_point("entrance", "Outpost entrance", "Entry", "Arrival corridor from the academy.", "hatch", OutpostLayout.px(OutpostLayout.SPAWN))
+	nav.add_point("return", "Academy transit pad", "Transit", "Return to the academy before the alert.", "hatch", OutpostLayout.px(OutpostLayout.RETURN_SPOT))
+	nav.add_point("power", "West power room", "Power", "Check battery reserves and rover charging.", "station", OutpostLayout.px(OutpostLayout.POWER_SPOT))
+	nav.add_point("crops", "East greenhouse", "Crops", "Set the grow-light power plan.", "station", OutpostLayout.px(OutpostLayout.GREEN_SPOT))
+	nav.add_point("shelter", "Storm shelter hatch", "Shelter", "Hold E to open the hatch, then step inside.", "hatch", OutpostLayout.px(OutpostLayout.HATCH_SPOT + Vector2(0, 16)))
 	nav.add_point("rivera", "Engineer Rivera", "Rivera", "Ask Rivera about outpost power.", "crew", _rivera.position, _rivera)
 	nav.add_point("tanaka", "Dr. Tanaka", "Tanaka", "Ask Tanaka about the greenhouse.", "crew", _tanaka.position, _tanaka)
 	add_child(nav)
@@ -161,29 +147,22 @@ func _add_navigation(player: Node2D) -> void:
 
 
 func _process(delta: float) -> void:
-	_fx_time += delta
+	_time += delta
 	var illum := ResourceSim.illumination_at(ResourceSim.hour)
-	_tint.color = _tint.color.lerp(Color(0.56, 0.6, 0.9).lerp(Color.WHITE, illum), minf(1.0, delta * 3.0))
-	var alert_now := MissionDirector.stage == MissionDirector.Stage.ALERT
-	_vignette.color.a = (0.05 + 0.05 * sin(_fx_time * 5.0)) if alert_now else 0.0
-	if ResourceSim.sep_active:
-		queue_redraw()  # animate the particle storm outside
-	if not MissionDirector.ui_open:
-		_blink_time += delta
-		if _blink_time >= 0.35:
-			_blink_time = 0.0
-			_blink_on = not _blink_on
-			queue_redraw()
+	_tint.color = _tint.color.lerp(Color(0.66, 0.7, 0.96).lerp(Color.WHITE, illum), minf(1.0, delta * 3.0))
+	_hatch.alert = MissionDirector.stage == MissionDirector.Stage.ALERT
+	_update_crew(delta)
+	_update_shelter()
+	queue_redraw()
 
 
-# ---------------------------------------------------------------- stations
+# ---------------------------------------------------------------- stations and crew
 
-func _add_station(pos: Vector2, prompt: String, handler: Callable, objective_id: StringName, verb: String = "Use") -> void:
+func _add_station(pos: Vector2, prompt: String, handler: Callable, objective_id: StringName) -> void:
 	var station := Station.new()
 	station.prompt = prompt
 	station.objective_id = objective_id
-	station.interaction_verb = verb
-	station.position = (pos * SCALE).round()
+	station.position = OutpostLayout.px(pos)
 	station.used.connect(handler)
 	add_child(station)
 
@@ -192,25 +171,26 @@ func _add_crew(actors: Node2D, crew_name: String, sprite_path: String, at: Vecto
 	var crew := CrewMember.new()
 	crew.display_name = crew_name
 	crew.texture = load(sprite_path)
-	crew.position = (at * SCALE).round()
+	crew.position = OutpostLayout.px(at)
 	crew.used.connect(handler)
 	actors.add_child(crew)
 	return crew
 
 
-func _scaled(route: Array[Vector2]) -> PackedVector2Array:
+func _route(points: Array) -> PackedVector2Array:
 	var out := PackedVector2Array()
-	for p in route:
-		out.append((p * SCALE).round())
+	for p: Vector2 in points:
+		out.append(OutpostLayout.px(p))
 	return out
 
 
 func _on_tanaka_used() -> void:
 	var line := "Phew. Thick walls and a good plan. Nice work, {name}."
 	if MissionDirector.stage == MissionDirector.Stage.CHECKS:
-		line = "The lettuce loves these lamps, {name}. The lamp control is by the water tank."
+		line = "The lettuce loves these lamps, {name}. The lamp control is under the water tank."
 		if MissionDirector.greenhouse_checked:
 			line = "Thanks for setting the lamps, {name}. Now we wait and watch them grow."
+	FieldNotes.unlock(&"veggie")
 	Dialogue.play(&"crew_tanaka", "Dr. Tanaka", PackedStringArray([line]))
 
 
@@ -219,16 +199,17 @@ func _on_rivera_used() -> void:
 	if MissionDirector.stage == MissionDirector.Stage.CHECKS:
 		line = "We landed with the battery half empty, {name}. Check the console on the north wall."
 		if MissionDirector.power_checked:
-			line = "Good call at the console. Watch that sunlight forecast."
+			line = "Good call at the console. Watch that sunlight forecast on the wall screen."
 	Dialogue.play(&"crew_rivera", "Engineer Rivera", PackedStringArray([line]))
 
 
-## The alert begins: crew drop everything and head for the shelter, and the camera jolts.
+## The alert begins: crew drop everything and run for the hatch, and the camera jolts.
 func _start_alert_fx() -> void:
 	_tanaka.enabled = false
 	_rivera.enabled = false
+	_crew_phase = "to_hatch"
 	_rivera.say("Alarm! Shelter, now!")
-	_rivera.walk(_scaled(RIVERA_ROUTE))
+	_rivera.walk(_route([OutpostLayout.POWER_DOOR.get_center(), OutpostLayout.HALL_JUNCTION, OutpostLayout.RIVERA_WAIT]))
 	var camera := get_viewport().get_camera_2d()
 	if camera != null:
 		var jolt := create_tween()
@@ -236,8 +217,117 @@ func _start_alert_fx() -> void:
 			jolt.tween_property(camera, "offset", Vector2(randf_range(-3, 3), randf_range(-2, 2)), 0.04)
 		jolt.tween_property(camera, "offset", Vector2.ZERO, 0.05)
 	await get_tree().create_timer(0.7, false).timeout
-	_tanaka.say("Coming! Follow the arrows!")
-	_tanaka.walk(_scaled(TANAKA_ROUTE))
+	if _crew_phase != "to_hatch":
+		return
+	_tanaka.say("Coming!")
+	_tanaka.walk(_route([OutpostLayout.GREEN_DOOR.get_center(), OutpostLayout.HALL_JUNCTION, OutpostLayout.TANAKA_WAIT]))
+
+
+func _update_crew(delta: float) -> void:
+	match _crew_phase:
+		"to_hatch":
+			if _hatch.is_open():
+				_send_crew_inside()
+			elif not _rivera.is_walking() and not _tanaka.is_walking():
+				_crew_phase = "waiting"
+				_call_timer = 0.0
+		"waiting":
+			if _hatch.is_open():
+				_send_crew_inside()
+				return
+			_call_timer -= delta
+			if _call_timer <= 0.0:
+				_call_timer = 3.2
+				_rivera.say("Hold E on the hatch, {0}!".format([GameState.player_name]), 2.2)
+		"to_seat":
+			if not _rivera.is_walking() and not _tanaka.is_walking():
+				_crew_phase = "seated"
+
+
+func _send_crew_inside() -> void:
+	_crew_phase = "to_seat"
+	var door := OutpostLayout.SHELTER_DOOR.get_center()
+	var inside := door - Vector2(0, 22)
+	# Each one finishes whatever is left of the walk to the hatch, then goes through it.
+	for entry: Array in [
+			[_rivera, OutpostLayout.POWER_DOOR, OutpostLayout.RIVERA_WAIT, OutpostLayout.RIVERA_SEAT],
+			[_tanaka, OutpostLayout.GREEN_DOOR, OutpostLayout.TANAKA_WAIT, OutpostLayout.TANAKA_SEAT]]:
+		var crew: CrewMember = entry[0]
+		var points: Array = []
+		if not crew.is_walking() and crew.position.distance_to(OutpostLayout.px(entry[2])) > 40.0:
+			# Still at their post: leave through their own door first.
+			points = [(entry[1] as Rect2).get_center(), OutpostLayout.HALL_JUNCTION]
+		points.append_array([entry[2], door, inside, entry[3]])
+		crew.walk_on(_route(points))
+	_tanaka.say("Go, go, go!", 1.6)
+
+
+func _on_hatch_opened() -> void:
+	FieldNotes.unlock(&"shelter")
+
+
+## Stepping into the shelter during the alert is the whole interaction: the hatch seals
+## behind the crew and the power decision opens by itself.
+func _update_shelter() -> void:
+	if _sheltering or MissionDirector.stage != MissionDirector.Stage.ALERT:
+		return
+	if MissionDirector.ui_open or Dialogue.is_active:
+		return
+	if not _shelter_px.grow_individual(0, 0, 0, -3).has_point(_player.position):
+		return
+	_sheltering = true
+	_seal_and_decide()
+
+
+func _seal_and_decide() -> void:
+	MissionDirector.push_ui()   # freezes the astronaut and the storm clock for the short scene
+	if _crew_phase != "seated":
+		# Crew who are still on their way are hurried through the door.
+		_rivera.walk_speed = 240.0
+		_tanaka.walk_speed = 240.0
+		if _crew_phase != "to_seat":
+			_send_crew_inside()
+		var waited := 0.0
+		while (_crew_outside(_rivera) or _crew_outside(_tanaka)) and waited < 2.5:
+			await get_tree().create_timer(0.1, false).timeout
+			waited += 0.1
+		for crew: CrewMember in [_rivera, _tanaka]:
+			if _crew_outside(crew):
+				crew.walk(PackedVector2Array())
+				crew.position = OutpostLayout.px(OutpostLayout.RIVERA_SEAT if crew == _rivera else OutpostLayout.TANAKA_SEAT)
+	_hatch.seal()
+	if _hatch.state != BlastDoor.State.CLOSED:
+		await _hatch.sealed
+	var camera := get_viewport().get_camera_2d()
+	if camera != null:
+		var thud := create_tween()
+		thud.tween_property(camera, "offset", Vector2(0, 3), 0.05)
+		thud.tween_property(camera, "offset", Vector2.ZERO, 0.12)
+	_hud.call(&"flash", "HATCH SEALED", UiKit.GREEN)
+	await get_tree().create_timer(0.7, false).timeout
+	MissionDirector.pop_ui()
+	if MissionDirector.stage != MissionDirector.Stage.ALERT:
+		return
+	_open_shelter_panel()
+
+
+func _crew_outside(crew: CrewMember) -> bool:
+	return crew.position.y > _shelter_px.end.y - 2.0
+
+
+func _open_shelter_panel() -> void:
+	var s := ResourceSim.get_snapshot()
+	var body := "You are behind the shelter's thick, water-lined walls. Mass between the crew and the Sun's particles is what protects you.\n\nThe Sun is also about to slip behind a ridge, so the battery must last. Life Support stays on. What should wait?   Battery: %d of %d cells." % [s["battery_cells"], s["battery_cells_total"]]
+	var panel := ChoicePanel.open(self, "SHELTER SEALED  -  choose the power plan", body, PackedStringArray([
+		"Pause science. Keep full grow lights.",
+		"Keep science. Dim the grow lights.",
+		"Pause science AND dim the lights. Saves the most power."]), false)
+	panel.chosen.connect(_on_shelter_choice)
+
+
+func _on_shelter_choice(index: int) -> void:
+	MissionDirector.confirm_shelter(index)
+	_tanaka.say("Shielded. Now we wait.", 3.0)
 
 
 func _on_return_used() -> void:
@@ -250,9 +340,10 @@ func _on_return_used() -> void:
 
 func _on_power_used() -> void:
 	var s := ResourceSim.get_snapshot()
-	var body := "Battery: %d of %d cells charged.\nSolar panels: %s.\n" % [s["battery_cells"], s["battery_cells_total"], _sun_text()]
+	var body := "Battery: %d of %d cells charged.\nSolar panels: %s.\n" % [s["battery_cells"], s["battery_cells_total"], sun_text()]
+	FieldNotes.unlock(&"batteries")
 	if MissionDirector.stage == MissionDirector.Stage.CHECKS:
-		body += "The Sun slips behind a ridge in about 6 hours. Rover charging uses 3 power.\nChoose the reserve policy:"
+		body += "The wall screen shows the Sun slipping behind a ridge in about 6 hours. Charging the rover uses 3 power.\n\nChoose the reserve plan:"
 		var panel := ChoicePanel.open(self, "POWER STATION", body, PackedStringArray([
 			"Fill the battery: pause rover charging",
 			"Keep charging the rover (more science)"]))
@@ -264,185 +355,84 @@ func _on_power_used() -> void:
 func _on_power_choice(index: int) -> void:
 	ResourceSim.set_load_enabled(&"rover", index == 1)
 	MissionDirector.complete_check(&"power")
+	_hud.call(&"flash", "POWER CHECK DONE", UiKit.TEAL)
 	_after_check()
 
 
 func _on_green_used() -> void:
 	var body := "Crop health: %d of 100.\n" % int(ResourceSim.crop_health)
+	FieldNotes.unlock(&"veggie")
 	if MissionDirector.stage == MissionDirector.Stage.CHECKS:
-		body += "Grow lights use 3 power. Conservation mode dims them: 1.5 power, and the crops hold steady instead of growing.\nChoose the plan:"
+		body += "Grow lights use 3 power. Conservation mode dims them to 1.5 power: the crops stop growing but stay healthy.\n\nChoose the plan:"
 		var panel := ChoicePanel.open(self, "GREENHOUSE", body, PackedStringArray([
 			"Full grow lights (crops keep growing)",
 			"Conservation mode (saves power)"]))
 		panel.chosen.connect(_on_green_choice)
 	else:
-		ChoicePanel.open(self, "GREENHOUSE", body + "Grow lights: %s." % _lamp_text(), PackedStringArray(["OK"]))
+		ChoicePanel.open(self, "GREENHOUSE", body + "Grow lights: %s." % lamp_text(), PackedStringArray(["OK"]))
 
 
 func _on_green_choice(index: int) -> void:
 	ResourceSim.set_greenhouse_conservation(index == 1)
 	MissionDirector.complete_check(&"greenhouse")
+	_hud.call(&"flash", "CROP CHECK DONE", UiKit.GREEN)
 	_after_check()
 
 
 func _after_check() -> void:
-	_refresh()
 	if MissionDirector.checks_done() and not _alert_started:
 		_alert_started = true
 		_alert_sequence()
 
 
 func _alert_sequence() -> void:
-	await get_tree().create_timer(0.4, false).timeout
+	await get_tree().create_timer(0.6, false).timeout
 	Dialogue.play(&"shift", "Mission clock", PackedStringArray([
-		"Routine checks done. %d hours of the shift pass while the crew works." % int(MissionDirector.config["shift_hours_before_alert"])]))
+		"Routine checks done. %d hours of the shift pass while the crew works..." % int(MissionDirector.config["shift_hours_before_alert"])]))
 	await EventBus.dialogue_ended
 	MissionDirector.start_alert()
+	FieldNotes.unlock(&"sep")
 	var first := "RADIATION ALERT! Training scenario: this solar particle event is fictional."
 	if MissionDirector.sep_is_real:
-		first = "RADIATION ALERT! NASA recorded a solar particle event on %s. This is an archived record, replayed in our simulation." % MissionDirector.sep_time_text()
+		first = "RADIATION ALERT! NASA logged a solar particle event on %s. We are replaying that real record." % MissionDirector.sep_time_text()
 	Dialogue.play(&"alert", "Mission Control", PackedStringArray([
 		first,
-		"Solar energetic particles can harm people. The Moon has almost no atmosphere or global magnetic field to shield a crew.",
-		"Go NORTH to the thick-walled shelter and press E at its control. The clock runs while you walk. Life Support stays on; choose optional loads once safe."]))
-
-
-func _on_shelter_used() -> void:
-	match MissionDirector.stage:
-		MissionDirector.Stage.ALERT:
-			var s := ResourceSim.get_snapshot()
-			var body := "This room adds shielding between the crew and energetic solar particles. NASA monitors space weather and uses radiation measurements to help decide when crews should shelter.\n\nThe Sun is also about to go behind a ridge, so battery power is limited. Life Support remains on. Which optional loads should wait? Battery: %d of %d cells." % [s["battery_cells"], s["battery_cells_total"]]
-			var panel := ChoicePanel.open(self, "SHELTER: you are inside the shield", body, PackedStringArray([
-				"Pause science. Keep full grow lights. Saves science power.",
-				"Keep science. Put crops in conservation mode. Saves grow-light power.",
-				"Pause science and conserve crops. Saves the most power; slows both activities."]))
-			panel.chosen.connect(_on_shelter_choice)
-		MissionDirector.Stage.CHECKS:
-			Dialogue.play(&"shelter_info", "Shelter", PackedStringArray([
-				"This is the most shielded room in the outpost. Come here when the radiation alert sounds."]))
-		_:
-			pass
-
-
-func _on_shelter_choice(index: int) -> void:
-	MissionDirector.confirm_shelter(index)
-	_refresh()
+		"Fast particles from the Sun can harm people. The Moon has no thick air or global magnetic field to stop them.",
+		"Run NORTH to the storm shelter. Hold E to crank the hatch open, then get inside. The storm clock is running!"]))
 
 
 func _on_stage_changed(stage: int) -> void:
-	_refresh()
-	if stage == MissionDirector.Stage.ALERT:
-		_start_alert_fx()
-	elif stage == MissionDirector.Stage.DEBRIEF:
-		_tanaka.enabled = true
-		_rivera.enabled = true
-	if stage == MissionDirector.Stage.DEBRIEF:
-		_show_debrief.call_deferred()
+	match stage:
+		MissionDirector.Stage.ALERT:
+			_start_alert_fx()
+		MissionDirector.Stage.DEBRIEF:
+			_tanaka.enabled = true
+			_rivera.enabled = true
+			_hatch.unlock()
+			_show_debrief.call_deferred()
 
 
 # ---------------------------------------------------------------- debrief
 
 func _show_debrief() -> void:
-	var starved_hours := ResourceSim.hours_run - ResourceSim.life_support_ok_hours
-	var result := "Steady outpost"
-	var why := "The shelter's shielding blocked most storm particles, and your power plan kept the battery above empty through the shadow."
-	if not MissionDirector.reached_shelter:
-		result = "Caught outside the shield"
-		why = "The crew stayed outside the shelter for the whole storm, so exposure climbed every hour."
-	elif starved_hours > 0:
-		result = "Life Support lost power"
-		why = "The battery emptied in the dark, so even Life Support lost power. Saving more power before the shadow prevents this."
-	elif ResourceSim.emergency_shutoffs > 0:
-		result = "Close call"
-		why = "The battery ran out, so the outpost shut off %d lower-priority load(s) to protect Life Support." % ResourceSim.emergency_shutoffs
-	if MissionDirector.reached_shelter and MissionDirector.hours_unsheltered >= 4:
-		why += " Reaching the shelter sooner would lower exposure."
-
-	var shelter_line := "Shelter: never reached"
-	if MissionDirector.reached_shelter:
-		shelter_line = "Shelter: reached after %d storm hour(s) outside" % MissionDirector.hours_unsheltered
-	var text := "%s\nSimulated exposure: %.1f game units\nLowest battery: %.1f of %d units\nLife Support powered: %d of %d hours\nCrops: %d of 100     Science: %d points\nWHY: %s" % [
-		shelter_line, ResourceSim.exposure_log, ResourceSim.battery_min, int(ResourceSim.battery_capacity),
-		ResourceSim.life_support_ok_hours, ResourceSim.hours_run,
-		int(ResourceSim.crop_health), ResourceSim.science_points, why]
-	var panel := ChoicePanel.open(self, "DEBRIEF: " + result, text, PackedStringArray([
-		"Retry the mission (keeps your astronaut)", "Source notes", "Return to the academy"]), false)
-	panel.chosen.connect(_on_debrief_choice)
+	var report := MissionReport.open(self)
+	report.chosen.connect(_on_debrief_choice)
 
 
-func _on_debrief_choice(index: int) -> void:
-	if index == 0:
-		MissionDirector.begin_mission()
-		SceneRouter.go_to(&"outpost")
-	elif index == 1:
-		_show_sources()
-	else:
-		SceneRouter.go_to(&"academy_hub")
+func _on_debrief_choice(action: StringName) -> void:
+	match action:
+		&"retry":
+			MissionDirector.begin_mission()
+			SceneRouter.go_to(&"outpost")
+		&"academy":
+			SceneRouter.go_to(&"academy_hub")
+		&"stay":
+			_hatch.open()
 
 
-func _show_sources() -> void:
-	var text := "Training scenario: the solar particle event in this run is FICTIONAL."
-	if MissionDirector.sep_is_real:
-		text = "Event: NASA CCMC DONKI solar energetic particle record (ARCHIVED copy, retrieved %s).\nID: %s\nTime: %s. Instrument: %s.\nLink: %s" % [
-			MissionDirector.sep_retrieved, MissionDirector.sep_event_id(), MissionDirector.sep_time_text(),
-			MissionDirector.sep_instrument(), MissionDirector.sep_link()]
-	text += "\nThis record is a detection near Earth, not a radiation dose at a lunar outpost. Exposure, battery and power are simplified game units, and time is compressed. The sunlight shadow comes from terrain, not from the storm.\n\nNASA space-radiation overview: nasa.gov/hrp/hazard-space-radiation/"
-	var panel := ChoicePanel.open(self, "SOURCE NOTES", text, PackedStringArray(["Back to debrief"]), false)
-	panel.chosen.connect(func(_i: int) -> void: _show_debrief())
+# ---------------------------------------------------------------- text helpers (also used by the HUD)
 
-
-# ---------------------------------------------------------------- HUD
-
-func _build_hud() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 20
-	add_child(layer)
-	# Soft amber pulse over the whole screen during the alert.
-	_vignette = ColorRect.new()
-	_vignette.color = Color(1.0, 0.6, 0.15, 0.0)
-	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(_vignette)
-	for r: Rect2 in [Rect2(4, 4, 138, 24), Rect2(164, 5, 152, 24)]:
-		var back := ColorRect.new()
-		back.color = Color(0.05, 0.05, 0.12, 0.8)
-		back.position = r.position
-		back.size = r.size
-		back.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		layer.add_child(back)
-		if r.position.x > 100:
-			_alert_backdrop = back
-			back.hide()
-	_status = Label.new()
-	_status.position = Vector2(169, 5)
-	_status.add_theme_font_size_override("font_size", 9)
-	_status.modulate = C_AMBER
-	layer.add_child(_status)
-	_readout = Label.new()
-	_readout.add_theme_font_size_override("font_size", 8)
-	_readout.add_theme_constant_override("line_spacing", -2)
-	_readout.position = Vector2(8, 4)
-	layer.add_child(_readout)
-
-
-func _refresh() -> void:
-	var d := MissionDirector
-	_status.text = ""
-	if d.stage == d.Stage.ALERT:
-		_status.text = "RADIATION ALERT  •  SHELTER NORTH\nStorm hour %d/%d" % [d.storm_hours_done, d.storm_hours_total()]
-	elif d.stage == d.Stage.SHELTERED:
-		_status.text = "SHELTERING  •  Hour %d/%d" % [d.storm_hours_done, d.storm_hours_total()]
-	_alert_backdrop.visible = not _status.text.is_empty()
-	_readout.text = "Hour %d   Battery %d/%d cells\nSun: %s" % [
-		ResourceSim.hour, ResourceSim.battery_cells(), ResourceSim.battery_cells_total(), _sun_text()]
-	_power_label.text = "POWER   %sRover: %s" % ["[x] " if d.power_checked else "", "charging" if ResourceSim.is_powered(&"rover") else "paused"]
-	_green_label.text = "GREENHOUSE   %sLamps: %s" % ["[x] " if d.greenhouse_checked else "", _lamp_text()]
-	_shelter_label.text = "SHELTER"
-	_shelter_note.text = "GO HERE!" if d.stage == d.Stage.ALERT else "shielded"
-	queue_redraw()
-
-
-func _sun_text() -> String:
+static func sun_text() -> String:
 	var illum := ResourceSim.illumination_at(ResourceSim.hour)
 	if illum >= 0.9:
 		return "full sun"
@@ -451,31 +441,19 @@ func _sun_text() -> String:
 	return "in shadow"
 
 
-func _lamp_text() -> String:
+static func lamp_text() -> String:
 	if not ResourceSim.is_powered(&"greenhouse"):
 		return "off"
 	return "saving" if ResourceSim.greenhouse_conservation else "full"
 
 
-func _world_label(text: String, pos: Vector2, color: Color) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", 8)
-	l.position = (pos * SCALE).round()
-	l.modulate = color
-	l.z_index = 1
-	add_child(l)
-	return l
-
-
 # ---------------------------------------------------------------- collision
 
 func _build_collision() -> void:
-	var cols := MAP.x / CELL
-	var rows := MAP.y / CELL
-	var props: Array[Rect2] = [BATTERY_BANK, POWER_CONSOLE, CRATES, WATER_TANK]
-	props.append_array(BEDS)
-	props.append_array(BENCHES)
+	var cols := OutpostLayout.MAP.x / CELL
+	var rows := OutpostLayout.MAP.y / CELL
+	var floors := OutpostLayout.floors()
+	var props := OutpostLayout.blockers()
 
 	# 1 = walkable floor cell.
 	var grid := PackedByteArray()
@@ -484,7 +462,7 @@ func _build_collision() -> void:
 		for col in cols:
 			var p := Vector2(col * CELL + CELL * 0.5, row * CELL + CELL * 0.5)
 			var walkable := false
-			for f in FLOORS:
+			for f in floors:
 				if f.has_point(p):
 					walkable = true
 					break
@@ -515,166 +493,177 @@ func _build_collision() -> void:
 			elif not blocked and run_start >= 0:
 				var shape := CollisionShape2D.new()
 				var box := RectangleShape2D.new()
-				box.size = Vector2((col - run_start) * CELL, CELL) * SCALE
+				box.size = Vector2((col - run_start) * CELL, CELL) * OutpostLayout.SCALE
 				shape.shape = box
-				shape.position = Vector2(run_start * CELL, row * CELL) * SCALE + box.size * 0.5
+				shape.position = Vector2(run_start * CELL, row * CELL) * OutpostLayout.SCALE + box.size * 0.5
 				body.add_child(shape)
 				run_start = -1
 
 
 # ---------------------------------------------------------------- drawing
 
+func _rect_of(key: String, index: int = -1) -> Rect2:
+	var value: Variant = _art.get(key, [])
+	if index >= 0:
+		value = (value as Array)[index]
+	var a := value as Array
+	if a.size() < 4:
+		return Rect2()
+	return Rect2(a[0], a[1], a[2], a[3])
+
+
+func _point_of(key: String) -> Vector2:
+	var a := _art.get(key, [0, 0]) as Array
+	return Vector2(a[0], a[1])
+
+
 func _draw() -> void:
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE * SCALE)
-	var stage := MissionDirector.stage
-	var alert := stage == MissionDirector.Stage.ALERT
+	draw_texture(_bg, Vector2.ZERO)
+	var d := MissionDirector
+	var alert := d.stage == d.Stage.ALERT
+	var blink := int(_time * 2.8) % 2 == 0
+	var illum := ResourceSim.illumination_at(ResourceSim.hour)
 
-	# Lunar ground.
-	draw_rect(Rect2(0, 0, MAP.x, MAP.y), C_REGOLITH)
-	for crater: Vector3 in [Vector3(60, 60, 16), Vector3(420, 70, 12), Vector3(110, 255, 10), Vector3(360, 258, 8), Vector3(455, 30, 6), Vector3(20, 100, 7)]:
-		draw_circle(Vector2(crater.x, crater.y), crater.z, C_CRATER)
-		draw_arc(Vector2(crater.x, crater.y), crater.z, 0.0, TAU, 20, C_REGOLITH.lightened(0.12), 1.0)
-
-	for i in 150:
-		var p := Vector2((i * 139 + 17) % MAP.x, (i * 83 + 11) % MAP.y)
-		draw_rect(Rect2(p, Vector2(2, 1)), C_REGOLITH.lightened(0.07 if i % 3 == 0 else 0.02))
-
-	# Rover parked outside the power room. Its cable and light show whether it is charging.
-	var rover := Vector2(60, 252)
+	# --- Outside: solar panels darken in shadow, small lamps blink, the rover charges.
+	if illum < 0.95:
+		for i in (_art.get("solar_panels", []) as Array).size():
+			draw_rect(_rect_of("solar_panels", i).grow(-1), Color(0.02, 0.03, 0.1, 0.55 * (1.0 - illum)))
+	draw_rect(Rect2(_point_of("dish_light"), Vector2(1, 1)), C_AMBER if blink else C_AMBER_LO)
+	draw_rect(Rect2(_point_of("junction_light"), Vector2(1, 1)), C_TEAL if illum > 0.0 else C_DARK)
+	for light: Array in _art.get("path_lights", []):
+		draw_rect(Rect2(light[0], light[1], 1, 1), C_AMBER if int(_time * 1.5 + light[0]) % 2 == 0 else C_AMBER_LO)
 	if ResourceSim.is_powered(&"rover"):
-		draw_line(rover + Vector2(-9, -1), Vector2(40, 243), C_AMBER.darkened(0.2), 1.0)
-	draw_rect(Rect2(rover + Vector2(-9, -5), Vector2(18, 8)), C_STEEL)
-	draw_rect(Rect2(rover + Vector2(-6, -9), Vector2(8, 4)), C_WALL.lightened(0.25))
-	for wheel_x in [-8, -1, 6]:
-		draw_rect(Rect2(rover + Vector2(wheel_x, 3), Vector2(3, 3)), C_DARK)
-	if ResourceSim.is_powered(&"rover"):
-		draw_rect(Rect2(rover + Vector2(6, -8), Vector2(2, 2)), C_TEAL if _blink_on else C_DARK)
+		var port := _point_of("hull_port")
+		var plug := _point_of("rover_port")
+		draw_polyline(PackedVector2Array([port, port + Vector2(0, 8), Vector2(plug.x - 6, port.y + 12), plug]), C_AMBER_LO, 1.0)
+		draw_rect(Rect2(_point_of("rover_lamp"), Vector2(2, 2)), C_TEAL if blink else C_TEAL_LO)
 
-	# Solar particle storm: fast streaks across the open ground (a visualisation; real particles are invisible).
+	# --- Solar particle storm over open ground (a picture of something invisible in real life).
 	if ResourceSim.sep_active:
-		for i in 80:
-			var sx := fmod(i * 97.0 + _fx_time * 520.0, MAP.x + 40.0) - 20.0
-			var sy := fmod(i * 53.0 + i * i * 7.0 + _fx_time * 300.0, MAP.y + 40.0) - 20.0
-			draw_line(Vector2(sx, sy), Vector2(sx - 7, sy - 4), Color(1.0, 0.85, 0.5, 0.6), 1.0)
+		for i in 110:
+			var sx := fmod(i * 97.0 + _time * 620.0, _bg.get_width() + 60.0) - 30.0
+			var sy := fmod(i * 53.0 + i * i * 7.0 + _time * 340.0, _bg.get_height() + 40.0) - 20.0
+			var at := Vector2(sx, sy)
+			if sy < OutpostLayout.HORIZON * OutpostLayout.SCALE or _inside_hull(at):
+				continue
+			draw_line(at, at - Vector2(9, 5), Color(1.0, 0.86, 0.5, 0.75), 1.0)
+			draw_rect(Rect2(at, Vector2(1, 1)), Color(1.0, 0.97, 0.85))
 
-	# Hulls. The shelter gets a much thicker shell with caution stripes.
-	var thick := SHELTER_ROOM.grow_individual(12, 24, 12, 10)
-	draw_rect(thick, C_HULL.lightened(0.08))
-	for i in int(thick.size.x / 8.0):
-		if i % 2 == 0:
-			draw_rect(Rect2(thick.position.x + i * 8, thick.position.y, 8, 3), C_AMBER)
-	for f in FLOORS:
-		draw_rect(f.grow_individual(9, 19, 9, 10), C_DARK)
-		draw_rect(f.grow_individual(7, 18, 7, 7), C_HULL)
-		draw_rect(Rect2(f.position.x - 6, f.end.y + 3, f.size.x + 12, 1), C_STEEL.darkened(0.35))
-	for room in ROOMS:
-		draw_rect(Rect2(room.position.x, room.position.y - 14, room.size.x, 14), C_WALL)
-		draw_rect(Rect2(room.position.x, room.position.y - 14, room.size.x, 2), C_STEEL.darkened(0.24))
-		draw_rect(Rect2(room.position.x, room.position.y - 2, room.size.x, 2), C_DARK)
+	# --- Corridor lamps: calm teal normally, amber and chasing north during the alert.
+	var lights := _art.get("corridor_lights", []) as Array
+	for i in lights.size():
+		var r := Rect2(lights[i][0], lights[i][1], lights[i][2], lights[i][3])
+		var row := i / 2
+		var color := C_TEAL_LO
+		if alert:
+			var rows := lights.size() / 2
+			color = C_AMBER if (rows - row + int(_time * 9.0)) % 4 == 0 else C_AMBER_LO.darkened(0.3)
+		elif (row + int(_time * 0.8)) % 5 == 0:
+			color = C_TEAL
+		draw_rect(r.grow(-1) if r.size.x > 2 else r, color)
 
-	# Floors (low contrast) with faint tile lines.
-	for f in FLOORS:
-		draw_rect(f, C_FLOOR)
-		var x := f.position.x + 16.0
-		while x < f.end.x:
-			draw_line(Vector2(x, f.position.y), Vector2(x, f.end.y), C_FLOOR_LINE, 1.0)
-			x += 16.0
-		var y := f.position.y + 16.0
-		while y < f.end.y:
-			draw_line(Vector2(f.position.x, y), Vector2(f.end.x, y), C_FLOOR_LINE, 1.0)
-			y += 16.0
+	# --- Door signs and floor lettering.
+	var power_door := OutpostLayout.px_rect(OutpostLayout.POWER_DOOR)
+	var green_door := OutpostLayout.px_rect(OutpostLayout.GREEN_DOOR)
+	UiKit.draw_text(self, Vector2(power_door.position.x + 9, power_door.position.y - 8), "POWER", "small", C_TEAL)
+	UiKit.draw_text(self, Vector2(green_door.position.x + 10, green_door.position.y - 8), "CROPS", "small", C_GREEN)
+	var hatch_px := OutpostLayout.px_rect(OutpostLayout.SHELTER_DOOR)
+	draw_string(UiKit.font_small, Vector2(hatch_px.position.x + 10, hatch_px.end.y + 16), "SHELTER", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, C_AMBER if (alert and blink) else C_AMBER_LO)
 
-	for room in ROOMS:
-		for i in range(4, int(room.size.x) - 6, 16):
-			var p := room.position + Vector2(i, -13)
-			draw_rect(Rect2(p, Vector2(12, 12)), C_HULL.lightened(0.06), false, 1.0)
-			draw_rect(Rect2(p + Vector2(1, 1), Vector2(1, 2)), C_STEEL.darkened(0.25))
-	for y in range(114, 244, 16):
-		for x in [208, 268]:
-			draw_rect(Rect2(x, y, 3, 7), C_TEAL.darkened(0.35 if _blink_on or y % 3 == 0 else 0.52))
-
-	# Door thresholds (amber).
-	for door: Rect2 in [POWER_DOOR, GREEN_DOOR]:
-		draw_rect(Rect2(door.position.x, door.position.y, 2, door.size.y), C_AMBER)
-		draw_rect(Rect2(door.end.x - 2, door.position.y, 2, door.size.y), C_AMBER)
-	for i in 5:
-		draw_rect(Rect2(SHELTER_DOOR.position.x + 2 + i * 7, SHELTER_DOOR.position.y + 6, 4, 6), C_AMBER if i % 2 == 0 else C_DARK)
-	# Entry airlock at the bottom of the corridor.
-	draw_rect(Rect2(222, 250, 36, 5), C_STEEL)
-	draw_rect(Rect2(226, 251, 6, 3), C_TEAL)
-	draw_rect(Rect2(248, 251, 6, 3), C_TEAL)
-
-	# --- Power room: battery bank shows the real charge, console with amber switches.
-	draw_rect(BATTERY_BANK, C_DARK)
+	# --- Power room: the battery bank shows the real charge; the wall screen is the sunlight forecast.
 	var cells := ResourceSim.battery_cells()
-	for i in ResourceSim.battery_cells_total():
-		var cell := Rect2(BATTERY_BANK.position.x + 1 + i * 8, BATTERY_BANK.position.y + 3, 6, 14)
-		var cell_color := C_TEAL if i < cells else C_HULL.lightened(0.1)
-		if i == cells and ResourceSim.last_generation > ResourceSim.last_demand and _blink_on:
-			cell_color = C_TEAL.darkened(0.5)  # the next cell pulses while charging
-		draw_rect(cell, cell_color)
-		draw_rect(Rect2(cell.position.x + 2, cell.position.y - 2, 2, 2), C_STEEL)
-	draw_rect(POWER_CONSOLE, C_STEEL)
-	draw_rect(Rect2(POWER_CONSOLE.position.x + 3, POWER_CONSOLE.position.y + 2, 22, 9), C_TEAL.darkened(0.25))
-	for i in 4:
-		draw_rect(Rect2(POWER_CONSOLE.position.x + 28 + i * 4, POWER_CONSOLE.position.y + 4, 2, 6), C_AMBER)
-	# Lightning bolt symbol on the console screen.
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(130, 127), Vector2(126, 131), Vector2(129, 131), Vector2(127, 135), Vector2(132, 130), Vector2(129, 130)]), C_AMBER)
-	draw_rect(CRATES, C_WALL.lightened(0.1))
-	draw_rect(Rect2(CRATES.position + Vector2(2, 2), Vector2(9, 16)), C_STEEL.darkened(0.2))
-	draw_rect(Rect2(CRATES.position + Vector2(13, 2), Vector2(9, 16)), C_STEEL.darkened(0.2))
+	var total := ResourceSim.battery_cells_total()
+	var charging := ResourceSim.last_generation > ResourceSim.last_demand
+	var low := cells <= 2
+	for i in mini(total, (_art.get("battery_cells", []) as Array).size()):
+		var cell := _rect_of("battery_cells", i)
+		if i < cells:
+			var fill := C_AMBER if low else C_TEAL
+			draw_rect(cell, fill.darkened(0.25))
+			draw_rect(Rect2(cell.position, Vector2(cell.size.x, 3)), fill)
+			draw_rect(Rect2(cell.position + Vector2(1, 4), Vector2(1, cell.size.y - 6)), fill.lightened(0.35))
+		elif i == cells and charging and blink:
+			draw_rect(Rect2(cell.position + Vector2(0, cell.size.y - 4), Vector2(cell.size.x, 4)), C_TEAL_LO)
+	var forecast := ResourceSim.illumination_forecast(10)
+	var screen := _rect_of("power_screen")
+	for i in forecast.size():
+		var bar_h := 2.0 + roundf(forecast[i] * (screen.size.y - 5.0))
+		var bar := Rect2(screen.position.x + 3 + i * 5, screen.end.y - 1 - bar_h, 3, bar_h)
+		draw_rect(bar, C_AMBER if forecast[i] > 0.0 else Color("27304f"))
+		if i == 0 and blink:
+			draw_rect(Rect2(bar.position.x, screen.position.y + 1, 3, 1), Color.WHITE)
 
-	for crate_x in [33, 45]:
-		draw_line(Vector2(crate_x, 217), Vector2(crate_x + 9, 217), C_AMBER.darkened(0.4), 1.0)
-	# --- Greenhouse: beds, grow lamps that dim in conservation mode, water tank control.
+	# --- Greenhouse: lamps and a wash of grow light over each bed, by lamp mode.
 	var lamps_on := ResourceSim.is_powered(&"greenhouse")
 	var saving := ResourceSim.greenhouse_conservation
-	var plant := C_GREEN
-	var lamp := Color(1.0, 0.95, 0.6)
+	var lamp := C_GROW
+	var wash := Color(C_GROW, 0.16 + 0.03 * sin(_time * 3.0))
 	if not lamps_on:
-		plant = Color(0.36, 0.45, 0.3)
 		lamp = C_DARK
+		wash = Color(0.05, 0.06, 0.16, 0.42)
 	elif saving:
-		plant = C_GREEN.darkened(0.25)
-		lamp = C_AMBER.darkened(0.35)
-	for bed in BEDS:
-		draw_rect(bed, C_STEEL.darkened(0.3))
-		draw_rect(bed.grow(-2), Color(0.3, 0.22, 0.18))
-		for rowi in 3:
-			for coli in 5:
-				var seed := bed.position + Vector2(6 + coli * 8, 6 + rowi * 7)
-				draw_rect(Rect2(seed + Vector2(0, 1), Vector2(4, 4)), plant.darkened(0.35))
-				draw_rect(Rect2(seed + Vector2(1, 0), Vector2(3, 3)), plant)
-				draw_rect(Rect2(seed + Vector2(2, 0), Vector2(1, 1)), plant.lightened(0.26))
-		draw_rect(Rect2(bed.position.x + 4, bed.position.y, bed.size.x - 8, 2), lamp)
-	draw_rect(WATER_TANK, C_STEEL)
-	draw_rect(WATER_TANK.grow(-3), C_TEAL.darkened(0.1))
-	draw_rect(Rect2(WATER_TANK.position.x + 8, WATER_TANK.end.y - 3, 4, 3), C_AMBER)
+		lamp = C_AMBER_LO
+		wash = Color(0.05, 0.06, 0.16, 0.2)
+	for i in (_art.get("beds", []) as Array).size():
+		var bed := _rect_of("beds", i)
+		draw_rect(Rect2(bed.position + Vector2(3, 4), Vector2(bed.size.x - 6, bed.size.y - 13)), wash)
+		draw_rect(_rect_of("bed_lamps", i), lamp)
+		draw_rect(Rect2(bed.position + Vector2(bed.size.x - 9, bed.size.y - 6), Vector2(4, 2)), C_GREEN if lamps_on and not saving else (C_AMBER if lamps_on else C_DARK))
+	draw_rect(_rect_of("green_screen").grow(-1), lamp if lamps_on else Color("27304f"))
+	var tank := _rect_of("water_tank")
+	for i in 3:
+		var rise := fmod(_time * (5.0 + i * 2.0) + i * 7.0, tank.size.y - 2.0)
+		draw_rect(Rect2(tank.position.x + 3 + i * 7, tank.end.y - 2 - rise, 1, 1), Color("d7f6ff"))
 
-	# --- Shelter: benches, hatch control and beacon (flashes during an alert).
-	for bench in BENCHES:
-		draw_rect(bench, Color(0.75, 0.42, 0.25))
-		draw_rect(Rect2(bench.position.x, bench.end.y - 3, bench.size.x, 3), Color(0.5, 0.28, 0.2))
-	draw_rect(Rect2(228, 18, 24, 11), C_STEEL)
-	draw_rect(Rect2(231, 20, 18, 7), C_AMBER if (alert and _blink_on) else C_AMBER.darkened(0.4))
-	# Shield symbol on the hatch control.
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(236, 21), Vector2(244, 21), Vector2(244, 24), Vector2(240, 27), Vector2(236, 24)]), C_DARK)
-	var beacon := Vector2(240, 10)
-	draw_circle(beacon, 4.0, C_AMBER if (not alert or _blink_on) else C_DARK)
-	if alert and _blink_on:
-		draw_arc(beacon, 7.0, 0.0, TAU, 16, C_AMBER, 1.0)
+	# --- Shelter: the wall monitor shows the particle count rising during the storm.
+	var rad := _rect_of("rad_screen")
+	for i in 9:
+		var level := 0.12 + 0.06 * sin(_time * 2.0 + i)
+		var color := C_GREEN
+		if ResourceSim.sep_active:
+			level = 0.55 + 0.4 * absf(sin(_time * 6.0 + i * 1.7))
+			color = C_AMBER if level < 0.8 else Color("ff6b5e")
+			if ResourceSim.crew_sheltered:
+				level *= 0.22
+				color = C_GREEN
+		var bar_h := maxf(1.0, roundf(level * (rad.size.y - 4.0)))
+		draw_rect(Rect2(rad.position.x + 3 + i * 3, rad.end.y - 1 - bar_h, 2, bar_h), color)
 
-	# --- Station floor markers (shape + colour, so they don't rely on colour alone).
-	for spot: Vector2 in [POWER_SPOT, GREEN_SPOT, SHELTER_SPOT, RETURN_SPOT]:
-		draw_arc(spot, 7.0, 0.0, TAU, 16, C_TEAL, 1.0)
-		draw_rect(Rect2(spot - Vector2(1, 1), Vector2(2, 2)), C_TEAL)
+	# --- Station markers: a pulsing ring until the check is done, then a quiet tick.
+	_marker(OutpostLayout.px(OutpostLayout.POWER_SPOT), d.power_checked, C_TEAL)
+	_marker(OutpostLayout.px(OutpostLayout.GREEN_SPOT), d.greenhouse_checked, C_GREEN)
+	var pad := _point_of("transit_pad")
+	draw_arc(pad, 5.0 + sin(_time * 3.0), 0.0, TAU, 14, Color(C_TEAL, 0.7), 1.0)
 
-	# --- Alert route: chevrons up the corridor to the shelter.
-	if alert and _blink_on:
-		var cy := 232.0
-		while cy > 60.0:
-			draw_colored_polygon(PackedVector2Array([
-				Vector2(240, cy - 5), Vector2(246, cy + 2), Vector2(243, cy + 2), Vector2(240, cy - 1), Vector2(237, cy + 2), Vector2(234, cy + 2)]), C_AMBER)
-			cy -= 18.0
+	# --- Alert route: chevrons up the corridor to the hatch.
+	if alert:
+		var corridor := OutpostLayout.px_rect(OutpostLayout.CORRIDOR)
+		var cx := corridor.get_center().x - 22.0
+		var cy := corridor.end.y - 46.0
+		var step := 0
+		while cy > corridor.position.y + 26.0:
+			if (step + int(_time * 6.0)) % 3 == 0:
+				for side: float in [0.0, 44.0]:
+					draw_colored_polygon(PackedVector2Array([
+						Vector2(cx + side, cy - 5), Vector2(cx + side + 6, cy + 2), Vector2(cx + side + 3, cy + 2),
+						Vector2(cx + side, cy - 1), Vector2(cx + side - 3, cy + 2), Vector2(cx + side - 6, cy + 2)]), C_AMBER)
+			cy -= 16.0
+			step += 1
+
+
+func _marker(at: Vector2, done: bool, color: Color) -> void:
+	if done:
+		draw_arc(at, 7.0, 0.0, TAU, 16, Color(color, 0.35), 1.0)
+		draw_polyline(PackedVector2Array([at + Vector2(-3, 0), at + Vector2(-1, 2), at + Vector2(3, -2)]), Color(color, 0.8), 1.0)
+		return
+	var pulse := fmod(_time * 1.2, 1.0)
+	draw_arc(at, 6.0 + pulse * 5.0, 0.0, TAU, 18, Color(color, 1.0 - pulse), 1.0)
+	draw_arc(at, 6.0, 0.0, TAU, 16, color, 1.0)
+	draw_rect(Rect2(at - Vector2(1, 1), Vector2(2, 2)), color)
+
+
+func _inside_hull(point: Vector2) -> bool:
+	for r in _hull_rects:
+		if r.has_point(point):
+			return true
+	return false

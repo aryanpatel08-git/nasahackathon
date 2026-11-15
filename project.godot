@@ -11,12 +11,15 @@ config_version=5
 [application]
 
 config/name="Lunar Life"
+config/description="Junior Astronaut Mission Trainer: train at the academy, run a lunar outpost and shelter the crew from a real NASA-recorded solar particle event."
 run/main_scene="res://scenes/ui/title_screen.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
+boot_splash/bg_color=Color(0.039, 0.063, 0.125, 1)
 
 [autoload]
 
+UiKit="*res://scripts/autoload/ui_kit.gd"
 EventBus="*res://scripts/autoload/event_bus.gd"
 GameState="*res://scripts/autoload/game_state.gd"
 ResourceSim="*res://scripts/autoload/resource_sim.gd"
@@ -28,6 +31,7 @@ TaskLog="*res://scripts/autoload/task_log.gd"
 PauseMenu="*res://scripts/autoload/pause_menu.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 MapManager="*res://scripts/autoload/map_manager.gd"
+FieldNotes="*res://scripts/autoload/field_notes.gd"
 
 [display]
 
@@ -40,7 +44,11 @@ window/stretch/scale_mode="integer"
 
 [gui]
 
+theme/custom="res://assets/ui/lunar_theme.tres"
+theme/custom_font="res://assets/fonts/Galmuri7-Latin.ttf"
 theme/default_font_antialiasing=0
+theme/default_font_hinting=0
+theme/default_font_subpixel_positioning=0
 
 [physics]
 

@@ -28,19 +28,34 @@ func _ready() -> void:
 	var name_label := Label.new()
 	name_label.text = display_name
 	name_label.add_theme_font_size_override("font_size", 8)
+	name_label.add_theme_color_override("font_shadow_color", Color("#0a1020"))
+	name_label.add_theme_constant_override("shadow_offset_y", 1)
 	name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	name_label.position = Vector2(-50, -44)
+	name_label.position = Vector2(-50, -43)
 	name_label.size = Vector2(100, 10)
-	name_label.modulate = Color(1, 1, 1, 0.8)
+	name_label.modulate = Color(1, 1, 1, 0.9)
 	add_child(name_label)
+
+	# Soft contact shadow.
+	var shadow := Polygon2D.new()
+	var oval := PackedVector2Array()
+	for i in 12:
+		var a := TAU * float(i) / 12.0
+		oval.append(Vector2(cos(a) * 8.0, sin(a) * 2.5))
+	shadow.polygon = oval
+	shadow.color = Color(0.02, 0.03, 0.08, 0.32)
+	shadow.position = Vector2(0, -1)
+	shadow.show_behind_parent = true
+	add_child(shadow)
+	move_child(shadow, 0)
 
 	_bubble = Label.new()
 	_bubble.add_theme_font_size_override("font_size", 8)
 	_bubble.add_theme_color_override("font_shadow_color", Color("#18182a"))
 	_bubble.add_theme_constant_override("shadow_offset_y", 1)
 	_bubble.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_bubble.position = Vector2(-70, -56)
-	_bubble.size = Vector2(140, 10)
+	_bubble.position = Vector2(-80, -55)
+	_bubble.size = Vector2(160, 10)
 	_bubble.modulate = Color(1.0, 0.82, 0.3)
 	_bubble.z_index = 3
 	_bubble.visible = false
@@ -77,6 +92,11 @@ func _process(delta: float) -> void:
 ## Walk through these points in order (world pixels).
 func walk(points: PackedVector2Array) -> void:
 	_path = points
+
+
+## Keep walking the current route, then continue through these points.
+func walk_on(points: PackedVector2Array) -> void:
+	_path.append_array(points)
 
 
 func is_walking() -> bool:

@@ -81,7 +81,20 @@ func pop_ui() -> void:
 # ------------------------------------------------------------- stage changes
 
 func start_new_game() -> void:
+	_ui_count = 0
 	_set_stage(Stage.BRIEFING)
+
+
+## "Continue" on the title screen: pick the stage back up from what the profile has earned.
+## A mission that was under way starts again from the academy.
+func resume_from_save() -> void:
+	_ui_count = 0
+	if can_graduate():
+		_set_stage(Stage.GRADUATED)
+	elif GameState.get_flag(&"mentor_commander"):
+		_set_stage(Stage.TRAINING)
+	else:
+		_set_stage(Stage.BRIEFING)
 
 
 func finish_briefing() -> void:

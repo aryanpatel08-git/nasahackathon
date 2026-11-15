@@ -182,7 +182,7 @@ func update_route(current: NavigationFloor) -> void:
 	var id := local_target()
 	if not floor.points.has(id):
 		floor.route.clear()
-	elif floor.facility == target_facility and tracked_task.is_empty() and not owns_pause and floor.player.position.distance_to(floor.points[id].at) < 22.0:
+	elif floor.facility == target_facility and tracked_task.is_empty() and not owns_pause and floor.player.position.distance_to(floor.points[id].at) < 34.0:
 		var label: String = floor.points[id].title
 		clear_waypoint()
 		_mini_status.text = "Arrived: " + label
@@ -215,38 +215,27 @@ func _refresh_status() -> void:
 
 
 func _make_ui() -> void:
-	var theme_ui := Theme.new()
-	theme_ui.default_font_size = 9
-	var frame := StyleBoxFlat.new()
-	frame.bg_color = Color("#142039")
-	frame.border_color = Color("#66c6db")
-	frame.set_border_width_all(1)
-	frame.set_content_margin_all(6)
-	var button_style := frame.duplicate() as StyleBoxFlat
-	button_style.bg_color = Color("#253d59")
-	theme_ui.set_stylebox("normal", "Button", button_style)
-	var hover := button_style.duplicate() as StyleBoxFlat
-	hover.bg_color = Color("#365c78")
-	theme_ui.set_stylebox("hover", "Button", hover)
 	_mini = Button.new()
-	_mini.position = Vector2(342, 6)
-	_mini.size = Vector2(96, 57)
+	_mini.position = Vector2(344, 6)
+	_mini.size = Vector2(98, 56)
 	_mini.tooltip_text = "Open navigation map (M)"
 	_mini.focus_mode = Control.FOCUS_NONE
 	_mini.pressed.connect(open_map)
 	add_child(_mini)
 	_preview = MapDisplay.new()
 	_preview.position = Vector2(1, 1)
-	_preview.size = Vector2(94, 55)
+	_preview.size = Vector2(96, 54)
 	_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_mini.add_child(_preview)
 	_mini_status = Label.new()
-	_mini_status.position = Vector2(342, 63)
+	_mini_status.position = Vector2(306, 64)
 	_mini_status.size.x = 132
 	_mini_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_mini_status.add_theme_font_size_override("font_size", 8)
-	_mini_status.add_theme_color_override("font_shadow_color", Color("#0d1223"))
+	_mini_status.add_theme_color_override("font_color", UiKit.TEXT)
+	_mini_status.add_theme_color_override("font_shadow_color", UiKit.INK)
 	_mini_status.add_theme_constant_override("shadow_offset_y", 1)
+	_mini_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(_mini_status)
 	_overlay = ColorRect.new()
 	_overlay.color = Color(0.025, 0.04, 0.08, 0.88)
@@ -257,19 +246,16 @@ func _make_ui() -> void:
 	_panel.position = Vector2(12, 12)
 	_panel.size = Vector2(456, 246)
 	_panel.pivot_offset = Vector2(420, 20)
-	_panel.theme = theme_ui
-	_panel.add_theme_stylebox_override("panel", frame)
+	_panel.add_theme_stylebox_override("panel", UiKit.panel_box(UiKit.TEAL, UiKit.PANEL, 7))
 	_overlay.add_child(_panel)
 	var layout := VBoxContainer.new()
 	_panel.add_child(layout)
 	var header := HBoxContainer.new()
 	layout.add_child(header)
-	_title = Label.new()
-	_title.modulate = Color("#83f4ee")
-	_title.add_theme_font_size_override("font_size", 12)
+	_title = UiKit.label("", "title", UiKit.TEAL)
 	_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_title)
-	_close_button = _button(header, "Close  [M / Esc]", close_map)
+	_close_button = _button(header, "Close (M)", close_map)
 	var body := HBoxContainer.new()
 	layout.add_child(body)
 	_display = MapDisplay.new()
@@ -290,7 +276,7 @@ func _make_ui() -> void:
 	side.add_child(_description)
 	var zoom_controls := HBoxContainer.new()
 	side.add_child(zoom_controls)
-	_button(zoom_controls, "−", func() -> void: _display.change_zoom(1.0 / 1.2))
+	_button(zoom_controls, "-", func() -> void: _display.change_zoom(1.0 / 1.2))
 	_button(zoom_controls, "+", func() -> void: _display.change_zoom(1.2))
 	_button(side, "Clear waypoint", clear_waypoint)
 	var toggle := CheckButton.new()
@@ -302,12 +288,9 @@ func _make_ui() -> void:
 			floor.arrows = value
 			floor.queue_redraw())
 	side.add_child(toggle)
-	_status = Label.new()
-	_status.modulate = Color("#83f4ee")
+	_status = UiKit.label("", "small", UiKit.TEAL)
 	layout.add_child(_status)
-	var legend := Label.new()
-	legend.text = "CYAN DOT  YOU     CIRCLE  CREW     DIAMOND  STATION     SQUARE  HATCH     SCROLL / DRAG"
-	layout.add_child(legend)
+	layout.add_child(UiKit.label("Dot: you    Circle: crew    Diamond: station    Square: hatch    Scroll to zoom, drag to pan", "small", UiKit.TEXT_DIM))
 
 
 func _button(parent: Control, title: String, callback: Callable) -> Button:

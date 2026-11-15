@@ -2,13 +2,17 @@ class_name Station
 extends Node2D
 ## A spot in the world the player can use by walking up and pressing E.
 ## Connect to `used`. Set `enabled = false` to hide its prompt.
+##   prompt        : what the tag above the astronaut says ("Check power")
+##   hold_seconds  : above zero, E must be held this long (heavy things like the shelter hatch)
+##   extra_reach   : lets a wide object be used from further away than a point
 
 signal used
 
 var prompt: String = "Use"
-var interaction_verb: String = "Use"
 var enabled: bool = true
 var objective_id: StringName = &""
+var hold_seconds: float = 0.0
+var extra_reach: float = 0.0
 
 
 func _ready() -> void:
@@ -18,7 +22,7 @@ func _ready() -> void:
 
 
 func prompt_text() -> String:
-	return interaction_verb
+	return prompt
 
 
 func get_objective_id() -> StringName:

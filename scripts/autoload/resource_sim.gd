@@ -76,6 +76,9 @@ var battery_min: float = 28.0
 var hours_run: int = 0
 var life_support_ok_hours: int = 0
 var emergency_shutoffs: int = 0
+## One entry per simulated hour since reset_state(): what the mission report draws.
+##   {hour, battery, sun, sep, sheltered, starved, exposure}
+var history: Array[Dictionary] = []
 
 var _accum: float = 0.0
 
@@ -143,6 +146,7 @@ func reset_state(start_hour: int, start_battery: float, pattern: Array[float] = 
 	hours_run = 0
 	life_support_ok_hours = 0
 	emergency_shutoffs = 0
+	history.clear()
 	_accum = 0.0
 	last_generation = solar_capacity * illumination_at(hour)
 	last_demand = current_demand()
@@ -264,6 +268,10 @@ func advance_hour() -> void:
 	_update_greenhouse()
 	_update_science()
 	_update_radiation()
+	history.append({
+		"hour": hour, "battery": battery, "sun": illum, "sep": sep_active,
+		"sheltered": crew_sheltered, "starved": starved, "exposure": exposure_log,
+	})
 
 	hour += 1
 	EventBus.game_hour_passed.emit(hour)

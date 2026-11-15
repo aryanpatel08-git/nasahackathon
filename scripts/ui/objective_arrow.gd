@@ -37,7 +37,8 @@ func _draw() -> void:
 		return
 	var direction := (target_screen - player_screen).normalized()
 	if not visible:
-		var half := viewport * 0.5 - Vector2(18, 18)
+		# Stay clear of the HUD along the top and bottom edges.
+		var half := viewport * 0.5 - Vector2(18, 34)
 		var center := viewport * 0.5
 		var scale_to_edge := minf(half.x / maxf(absf(direction.x), 0.001), half.y / maxf(absf(direction.y), 0.001))
 		player_screen = center + direction * scale_to_edge

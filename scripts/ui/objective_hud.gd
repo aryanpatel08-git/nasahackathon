@@ -4,6 +4,7 @@ extends CanvasLayer
 var navigation: NavigationFloor
 var _panel: PanelContainer
 var _label: Label
+var _icon: Control
 var _arrow: Control
 var _objective_id := ""
 var _title := ""
@@ -17,18 +18,29 @@ var _change_tween: Tween
 func _ready() -> void:
 	layer = 22
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	var theme := Theme.new()
-	theme.default_font_size = 8
-	theme.set_stylebox("panel", "PanelContainer", _panel_style())
 	_panel = PanelContainer.new()
-	_panel.theme = theme
+	_panel.add_theme_stylebox_override("panel", _panel_style())
 	_panel.position = Vector2(6, 6)
-	_panel.custom_minimum_size = Vector2(174, 20)
+	_panel.custom_minimum_size = Vector2(172, 20)
 	add_child(_panel)
-	_label = Label.new()
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 5)
+	_panel.add_child(row)
+	# Arrow while the objective is open, tick for a moment when it is completed.
+	_icon = Control.new()
+	_icon.custom_minimum_size = Vector2(8, 10)
+	_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_icon.draw.connect(_draw_icon)
+	row.add_child(_icon)
+	var words := VBoxContainer.new()
+	words.add_theme_constant_override("separation", -1)
+	words.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(words)
+	words.add_child(UiKit.label("OBJECTIVE", "small", UiKit.TEXT_DIM))
+	_label = UiKit.label("", "small", UiKit.TEXT)
 	_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_panel.add_child(_label)
+	words.add_child(_label)
 	_arrow = Control.new()
 	_arrow.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_arrow.set_script(load("res://scripts/ui/objective_arrow.gd"))
@@ -55,12 +67,23 @@ func _process(delta: float) -> void:
 	if hidden:
 		return
 	_pulse += delta
+	_icon.queue_redraw()
 	if _completed_time > 0.0:
 		_completed_time -= delta
 		if _completed_time <= 0.0:
 			_title = _next_title
 			_next_title = ""
-			_label.text = "▸ " + _title if not _title.is_empty() else ""
+			_label.text = _title
+
+
+func _draw_icon() -> void:
+	if _completed_time > 0.0:
+		_icon.draw_polyline(PackedVector2Array([Vector2(0, 5), Vector2(3, 8), Vector2(8, 2)]), UiKit.GREEN, 2.0)
+	else:
+		var nudge := roundf(absf(sin(_pulse * 4.0)))
+		_icon.draw_colored_polygon(PackedVector2Array([Vector2(1 + nudge, 1), Vector2(6 + nudge, 5), Vector2(1 + nudge, 9)]), UiKit.AMBER)
+
+
 func _refresh() -> void:
 	var previous_id := _objective_id
 	var was_tracking_previous := not previous_id.is_empty() and MapManager.tracked_task == previous_id
@@ -75,12 +98,12 @@ func _refresh() -> void:
 				break
 		if previous_done and not _title.is_empty():
 			_next_title = next_title
-			_label.text = "✓ " + _title
-			_completed_time = 0.65
+			_label.text = _title
+			_completed_time = 0.9
 		else:
 			_title = next_title
 			_next_title = ""
-			_label.text = "▸ " + _title if not _title.is_empty() else ""
+			_label.text = _title
 			_completed_time = 0.0
 		if not next_title.is_empty():
 			_animate_change()
@@ -117,9 +140,7 @@ func _has_target() -> bool:
 
 
 func _panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("111c32", 0.92)
-	style.border_color = Color("62c7cd")
-	style.set_border_width_all(1)
-	style.set_content_margin_all(4)
+	var style := UiKit.flat_box(Color(UiKit.INK, 0.88), UiKit.TEAL_DIM, 3)
+	style.content_margin_left = 5
+	style.content_margin_right = 5
 	return style
