@@ -1,67 +1,79 @@
 # Lunar Life
 
-**Junior Astronaut Mission Trainer** for the 2026 NASA Space Apps Challenge.
-Team: Kareem Dahrouj, Aryan Patel, Jimmy Lam.
+### A pixel-art lunar outpost game about crew safety, space farming, and solar storms.
 
-You are a new crew member at a research outpost near the Moon's South Pole. Over a **five-day
-mission** you learn what it takes to become an astronaut, keep the outpost's power and greenhouse
-running, run real space-farming experiments, and on Day 5 get everyone behind the storm shelter
-when a solar particle storm arrives. The storm is a replay of a real NASA DONKI record (10 May 2024).
+**Lunar Life** is a playable educational game created by a three-person team for the 2026 NASA Space Apps Challenge. Over a five-day mission, players train as an astronaut, keep a lunar research outpost running, grow food, and shelter the crew during a solar-particle-event alert based on a NASA DONKI record.
 
-## Run it
-1. Open Godot 4.7 (4.7.2 was used), choose **Import**, and pick `project.godot` in this folder.
-2. Press **F5**.
+![Lunar Life title screen](tools/shots/r1_c1_l14_00_title.png)
 
-## Controls
-| Key | Action |
+> Team project by Kareem Dahrouj, Aryan Patel, and Jimmy Lam.
+
+### Jimmy Lam's contribution
+
+Contributed interactive astronaut-training and space-farming gameplay, including Suit Up and Floaty Fix lessons, planting and crew-health activities, lunar-regolith sorting, first harvest, and shelter-preparation features. These systems connect to the mission's task and progression flow.
+
+## Screenshots
+
+| Outpost operations | Mission debrief |
 | --- | --- |
-| WASD / arrows (or gamepad stick) | Walk. Two keys at once walks diagonally. |
-| E / Space / Enter (gamepad A) | Talk, use, next line. Every story screen waits for this key. |
-| Hold E | Crank open the storm-shelter hatch. |
-| M | Map and waypoints. |
-| N | Sound on / off. |
-| Esc / P | Pause: field notes, tasks, help, sound. |
+| ![Power station decision panel](tools/shots/r1_c1_l14_08_power_panel.png) | ![Mission report and storm-day chart](tools/shots/r1_c1_l14_13_debrief.png) |
 
-## The five-day mission (a first run takes about 25 minutes; this is an estimate, not a timed playtest)
-Each outpost day runs: **morning → station tasks → a learning activity → evening log at the comms desk →
-sleep in a sleep pod**. Battery, crops and science carry over from day to day; the crops visibly grow.
-The HUD shows "Day N of 5".
+## Play
 
-1. **Day 1 — Academy: becoming an astronaut.** Intro slides, Commander Okafor's briefing, then
-   sort real NASA selection requirements from myths. Capture cargo with the robotic-arm trainer
-   (plus a quiz on astronaut training) and earn Engineer Rivera's power-console certificate.
-2. **Day 2 — Arrival: power and living.** Morning power and greenhouse checks, plant the plant pillows
-   with Dr. Tanaka, and a crew health check on the exercise bike (predict what low gravity does to bones).
-3. **Day 3 — Space farming science.** Predict, then watch a light-recipe experiment grow; sort Earth soil
-   from lunar regolith; taste the first harvest and learn the history of NASA's Veggie unit.
-4. **Day 4 — Space weather watch.** Sort a DONKI-style feed of solar events, then a shelter drill
-   (hold E on the hatch, step inside - no penalty).
-5. **Day 5 — Last day of the rotation.** A routine morning, then the radiation alert: a short, skippable
-   danger briefing (what a solar particle event is, why the Moon has no shield, why mass protects, how
-   warnings work), the run to the shelter and the shelter power plan.
-6. **Mission report** — the storm day's battery chart and three star ratings (crew safety, power,
-   food + science). Try again restarts from the morning of Day 5.
+**Requirements:** Godot 4.7 or later. The project was built with Godot 4.7.2.
 
-Learning is interactive: quizzes and sorting with instant feedback, predict-then-reveal, and two hands-on
-minigames. Fifteen **field notes** unlock as you play and are the "read more" layer: the real fact, how the
-game simplifies it, and its source.
+1. Clone or download this repository.
+2. Open `project.godot` in Godot.
+3. Press **F6** to run the current scene or **F5** to start the game.
 
-## What is real and what is simplified
-- Real: the DONKI solar-energetic-particle record, the facts in the field notes (sources in `CREDITS.md`).
-- Simplified: exposure, battery, power and time are game units. The record is a detection near Earth,
-  not a dose at a lunar outpost. The sunlight shadow pattern is invented.
-  The game says so on the report's **Sources** page and in the last field note.
+The project includes a Web export preset in `export_presets.cfg`. A web build has not been published from this repository.
 
-## For developers
-- Everything is built in code; scenes are one node with a script. Autoloads are listed in `project.godot`.
-- Floor plans live in `scripts/outpost/outpost_layout.gd` and `scripts/academy/academy_layout.gd`.
-  The room art is painted from those files: `python3 tools/art/paint_world.py` and `tools/art/paint_academy.py`.
-- Sound is made by `python3 tools/audio/make_audio.py`.
-- Automatic playthrough of all five days with about 345 checks:
-  `godot --headless --path . res://tools/playtest.tscn -- speed=3`
-  (options: `rover=0|1 choice=0|1|2 late=N`). Screenshots from the last rendered run are in `tools/shots/`.
-- The day plan is `data/mission/days.json`; learning activities are `data/learning/activities.json`.
-- `python3 tools/dev/check_layout.py` checks that furniture never blocks a door, station or route.
-- `tools/dev/day_table.tscn` prints five-day outcomes per power habit; `tools/dev/strategy_table.tscn`
-  prints storm strategies. Night length and star thresholds were set from them.
-- What changed in the five-day build and how to test it: `docs/FIVE-DAY-BATCH.md`.
+### Controls
+
+| Input | Action |
+| --- | --- |
+| WASD / arrow keys | Move |
+| E / Space / Enter | Talk, interact, or continue |
+| Hold E | Open the storm-shelter hatch |
+| M | Open the map and waypoints |
+| N | Toggle sound |
+| Esc / P | Open pause menu, field notes, tasks, and help |
+
+## The mission
+
+Each outpost day combines crew tasks with a short interactive lesson. Power, crops, and science carry forward between days, so choices shape the final report.
+
+1. **Train:** astronaut selection, robotic-arm practice, suit checks, and a simulated neutral-buoyancy task.
+2. **Settle in:** inspect power and greenhouse systems, plant crops, and learn how exercise supports crew health.
+3. **Run experiments:** compare light recipes, sort lunar regolith samples, and collect a harvest.
+4. **Monitor space weather:** identify solar events and practice reaching the shelter.
+5. **Protect the crew:** react to the radiation alert, get the crew inside, and make a shelter power plan.
+
+Fifteen field notes unlock through play. They explain the real-world fact, how the game simplifies it, and where to read more.
+
+## What this project demonstrates
+
+- **Systems design:** a five-day mission loop connects task completion, time, battery, crops, science, crew safety, and a final score.
+- **Data-driven content:** mission days and interactive learning activities are stored separately from their gameplay systems.
+- **Navigation and interaction:** the academy and outpost use grid-based route finding, mapped destinations, and contextual interactions.
+- **Research-led learning:** quizzes, sorting, prediction, and small hands-on activities teach spaceflight and space-farming concepts.
+- **Careful source framing:** the solar event is an archived NASA CCMC DONKI observation near Earth, not a measured lunar radiation dose.
+- **Custom production tools:** Python scripts paint the room art from code-defined layouts and generate the game's synthesized audio.
+
+## Build notes
+
+- **Engine:** Godot 4.7 / GDScript
+- **Rendering:** 2D pixel-art, Godot GL Compatibility renderer
+- **Content:** JSON mission and lesson data; NASA event record cached in `data/nasa/`
+- **Art and audio:** procedural room backgrounds and synthesized sound; attributions are listed in [CREDITS.md](CREDITS.md)
+- **Development notes:** [five-day mission build](docs/FIVE-DAY-BATCH.md), [navigation](docs/NAVIGATION.md), and [project handoff](docs/handoff/Lunar-Life-Handoff/README.md)
+
+## Sources and limitations
+
+NASA DONKI recorded the event used for the alert near Earth. The game does not estimate a dose at the Moon. Exposure, power, battery, and time use simplified game units; the shadow pattern is a fictional stand-in for difficult south-polar lighting. The game is an educational simulation, not astronaut training or mission-planning software.
+
+Read [CREDITS.md](CREDITS.md) for NASA and research sources, art and font attribution, and sound details.
+
+## Team and portfolio use
+
+This is a team project. Keep the collaborators and existing asset credits visible when forking or sharing it. For resume bullets and a LinkedIn-ready project description, see [Portfolio copy](docs/PORTFOLIO.md). Tailor the examples to the work you personally completed and can discuss.
